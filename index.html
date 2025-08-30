@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dragon Egg Dash - Dynamic Eyes</title>
+<style>
+  body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background: #222;
+    margin: 0;
+    font-family: sans-serif;
+    color: #fff;
+    user-select: none;
+    flex-direction: column;
+  }
+  canvas {
+    background: #333;
+    display: none;
+  }
+  #hud {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    display: none;
+  }
+  #startScreen {
+    text-align: center;
+  }
+  button {
+    margin-top: 10px;
+    padding: 10px 20px;
+    font-size: 18px;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<div id="startScreen">
+  <h1>Dragon Egg Dash</h1>
+  <p>Collect eggs to score points.<br> Avoid the enemies.<br> You have 3 lives and 60 seconds per game.<br> Use arrow keys to move (diagonal supported).</p>
+  <button id="startBtn">Start Game</button>
+</div>
+
+<div id="hud">
+  <div id="score">Score: 0 | Lives: 3 | Time: 60 | High Score: 0</div>
+  <button id="restartBtn">Restart</button>
+</div>
+
+<canvas id="gameCanvas" width="600" height="400"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const tileSize = 40;
+const playerSize = 30;
+const enemySize = 30;
+const eggSize = 20;
+const rows = 9;
+const cols = 15;
+
+const baseSpeed = 1.5;
+
+let score = 0;
+let lives = 3;
+let timeLeft = 60;
+let gameOver = false;
+let highScore = 0;
+
+let maze = [];
+let player;
+let enemies = [];
+let egg;
+const keys = {};
+
+function generateMaze() {
+  maze = [];
+  for (let row = 0; row < rows; row++) {
+    maze[row] = [];
+    for (let col = 0; col < cols; col++) {
+      maze[row][col] = (row === 0 || row === rows - 1 || col === 0 || col === cols - 1) ? 1 : (Math.random() < 0.15 ? 1 : 0);
+    }
+  }
+  maze[1][1] = maze[1][2] = maze[2][1] = 0;
+}
+
+function getFreePositions() {
+  const positions = [];
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      if (maze[row][col] === 0) positions.push({x: col*tileSize+5, y: row*tileSize+5});
+    }
+  }
+  return positions;
+}
+
+function initGame() {
+  generateMaze();
+  player = {x: 1*tileSize+5, y: 1*tileSize+5, dx: baseSpeed, dy: 0};
+  enemies = [spawnEnemy()];
+  spawnEgg();
+  score = 0;
+  lives = 3;
+  timeLeft = 60;
+  gameOver = false;
+  updateHUD();
+}
+
+function spawnEnemy() {
+  const free = getFreePositions().filter(pos => 
+    !(Math.abs(pos.x - player.x) < tileSize && Math.abs(pos.y - player.y) < tileSize) &&
+    !(egg && Math.abs(pos.x - egg.x) < tileSize && Math.abs(pos.y - egg.y) < tileSize) &&
+    !enemies.some(e => Math.abs(pos.x - e.x) < tileSize && Math.abs(pos.y - e.y) < tileSize)
+  );
+  if(free.length === 0) return null;
+  const pos = free[Math.floor(Math.random()*free.length)];
+  let dx = (Math.random()*baseSpeed + 0.5) * (Math.random()<0.5?-1:1);
+  let dy = (Math.random()*baseSpeed + 0.5) * (Math.random()<0.5?-1:1);
+  const factor = baseSpeed / Math.sqrt(dx*dx + dy*dy);
+  dx *= factor;
+  dy *= factor;
+  return {x: pos.x, y: pos.y, dx, dy};
+}
+
+function spawnEgg() {
+  const free = getFreePositions().filter(pos => 
+    !(Math.abs(pos.x - player.x) < tileSize && Math.abs(pos.y - player.y) < tileSize) &&
+    !enemies.some(e => Math.abs(pos.x - e.x) < tileSize && Math.abs(pos.y - e.y) < tileSize)
+  );
+  egg = free[Math.floor(Math.random()*free.length)];
+}
+
+// Eye helper
+function drawEyes(x, y, size, dx, dy) {
+  const eyeOffset = size/4;
+  const eyeSize = 5;
+  const angle = Math.atan2(dy, dx);
+  const eyeMove = eyeOffset/2;
+  const exOffset = Math.cos(angle) * eyeMove;
+  const eyOffset = Math.sin(angle) * eyeMove;
+
+  const leftEyeX = x + eyeOffset + exOffset;
+  const leftEyeY = y + eyeOffset + eyOffset;
+  const rightEyeX = x + size - eyeOffset - eyeSize + exOffset;
+  const rightEyeY = y + eyeOffset + eyOffset;
+
+  ctx.fillStyle='white';
+  ctx.fillRect(leftEyeX, leftEyeY, eyeSize, eyeSize);
+  ctx.fillRect(rightEyeX, rightEyeY, eyeSize, eyeSize);
+}
+
+function drawMaze() {
+  for(let row=0; row<rows; row++){
+    for(let col=0; col<cols; col++){
+      if(maze[row][col]===1){
+        ctx.fillStyle='#555';
+        ctx.fillRect(col*tileSize, row*tileSize, tileSize, tileSize);
+      }
+    }
+  }
+}
+
+function drawPlayer(){
+  ctx.fillStyle='green';
+  ctx.fillRect(player.x, player.y, playerSize, playerSize);
+  drawEyes(player.x, player.y, playerSize, player.dx, player.dy);
+}
+
+function drawEnemies(){
+  enemies.forEach(e=>{
+    ctx.fillStyle='red';
+    ctx.fillRect(e.x, e.y, enemySize, enemySize);
+    drawEyes(e.x, e.y, enemySize, e.dx, e.dy);
+  });
+}
+
+function drawEgg(){
+  ctx.fillStyle='gold';
+  ctx.beginPath();
+  ctx.ellipse(egg.x+eggSize/2, egg.y+eggSize/2, eggSize/2, eggSize/2, 0,0,Math.PI*2);
+  ctx.fill();
+}
+
+function rectCollision(a,b,sizeA,sizeB){
+  return a.x < b.x + sizeB && a.x + sizeA > b.x &&
+         a.y < b.y + sizeB && a.y + sizeA > b.y;
+}
+
+function wallCollisionPhysics(obj, size){
+  for(let row=0; row<rows; row++){
+    for(let col=0; col<cols; col++){
+      if(maze[row][col]===1){
+        const wall = {x: col*tileSize, y: row*tileSize, size: tileSize};
+        if(obj.x < wall.x + wall.size &&
+           obj.x + size > wall.x &&
+           obj.y < wall.y + wall.size &&
+           obj.y + size > wall.y){
+          const prevX = obj.x - obj.dx;
+          const prevY = obj.y - obj.dy;
+          if(prevX + size <= wall.x || prevX >= wall.x + wall.size) obj.dx *= -1;
+          if(prevY + size <= wall.y || prevY >= wall.y + wall.size) obj.dy *= -1;
+        }
+      }
+    }
+  }
+  obj.x += obj.dx;
+  obj.y += obj.dy;
+}
+
+function updatePlayer(){ wallCollisionPhysics(player, playerSize); }
+function updateEnemies(){ enemies.forEach(e=>wallCollisionPhysics(e, enemySize)); }
+
+function checkCollisions(){
+  enemies.forEach(enemy=>{
+    if(rectCollision(player, enemy, playerSize, enemySize)){
+      lives--;
+      if(lives <=0){
+        gameOver=true;
+        if(score > highScore) highScore = score;
+        alert(`Game Over! Final Score: ${score}`);
+        initGame();
+        startTimer();
+      }
+      resetPlayer();
+    }
+  });
+
+  if(rectCollision(player, egg, playerSize, eggSize)){
+    score++;
+    enemies.push(spawnEnemy());
+    spawnEgg();
+  }
+
+  updateHUD();
+}
+
+function resetPlayer(){
+  player.x = 1*tileSize+5;
+  player.y = 1*tileSize+5;
+  player.dx = baseSpeed;
+  player.dy = 0;
+}
+
+function updateHUD(){
+  document.getElementById('score').textContent=`Score: ${score} | Lives: ${lives} | Time: ${timeLeft} | High Score: ${highScore}`;
+}
+
+function gameLoop(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  drawMaze();
+  drawEgg();
+  drawPlayer();
+  drawEnemies();
+  updatePlayer();
+  updateEnemies();
+  checkCollisions();
+  if(!gameOver) requestAnimationFrame(gameLoop);
+}
+
+let timerInterval;
+function startTimer(){
+  clearInterval(timerInterval);
+  timeLeft = 60;
+  timerInterval=setInterval(()=>{
+    if(gameOver) return;
+    timeLeft--;
+    updateHUD();
+    if(timeLeft<=0){
+      gameOver=true;
+      if(score > highScore) highScore = score;
+      alert(`Time's up! Final Score: ${score}`);
+      initGame();
+      startTimer();
+    }
+  },1000);
+}
+
+document.addEventListener('keydown', e => { keys[e.key] = true; updatePlayerDirection(); });
+document.addEventListener('keyup', e => { keys[e.key] = false; updatePlayerDirection(); });
+
+function updatePlayerDirection(){
+  let dx=0, dy=0;
+  if(keys['ArrowUp']) dy=-baseSpeed;
+  if(keys['ArrowDown']) dy=baseSpeed;
+  if(keys['ArrowLeft']) dx=-baseSpeed;
+  if(keys['ArrowRight']) dx=baseSpeed;
+  if(dx!==0 && dy!==0){ dx*=0.707; dy*=0.707; }
+  if(dx!==0 || dy!==0){ player.dx=dx; player.dy=dy; }
+}
+
+document.getElementById('startBtn').addEventListener('click', ()=>{
+  document.getElementById('startScreen').style.display='none';
+  canvas.style.display='block';
+  document.getElementById('hud').style.display='block';
+  initGame();
+  startTimer();
+  gameLoop();
+});
+
+document.getElementById('restartBtn').addEventListener('click', ()=>{
+  initGame();
+  startTimer();
+  gameLoop();
+});
+</script>
+</body>
+</html>
