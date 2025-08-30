@@ -38,12 +38,6 @@
     font-size: 18px;
     cursor: pointer;
   }
-  .heart {
-    display: inline-block;
-    color: red;
-    font-size: 24px;
-    margin: 0 2px;
-  }
   #timerBarContainer {
     width: 300px;
     height: 20px;
@@ -99,7 +93,6 @@ const enemySize = 30;
 const eggSize = 20;
 const rows = 9;
 const cols = 15;
-
 const baseSpeed = 1.5;
 
 let score = 0;
@@ -112,24 +105,27 @@ let maze = [];
 let player;
 let enemies = [];
 let egg;
-const keys = {};
+let eggCollected = false;
+let eggAnimFrame = 0;
+const keys = [];
+let particles = [];
 
 function generateMaze() {
   maze = [];
   for (let row = 0; row < rows; row++) {
     maze[row] = [];
     for (let col = 0; col < cols; col++) {
-      maze[row][col] = (row === 0 || row === rows - 1 || col === 0 || col === cols - 1) ? 1 : (Math.random() < 0.15 ? 1 : 0);
+      maze[row][col] = (row===0||row===rows-1||col===0||col===cols-1)?1:(Math.random()<0.15?1:0);
     }
   }
-  maze[1][1] = maze[1][2] = maze[2][1] = 0;
+  maze[1][1]=maze[1][2]=maze[2][1]=0;
 }
 
 function getFreePositions() {
   const positions = [];
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      if (maze[row][col] === 0) positions.push({x: col*tileSize+5, y: row*tileSize+5});
+  for (let row=0; row<rows; row++){
+    for(let col=0; col<cols; col++){
+      if(maze[row][col]===0) positions.push({x: col*tileSize+5, y: row*tileSize+5});
     }
   }
   return positions;
@@ -137,60 +133,53 @@ function getFreePositions() {
 
 function initGame() {
   generateMaze();
-  player = {x: 1*tileSize+5, y: 1*tileSize+5, dx: baseSpeed, dy: 0};
-  enemies = [spawnEnemy()];
+  player={x:1*tileSize+5, y:1*tileSize+5, dx:baseSpeed, dy:0};
+  enemies=[spawnEnemy()];
   spawnEgg();
-  score = 0;
-  lives = 3;
-  timeLeft = 60;
-  gameOver = false;
+  score=0;
+  lives=3;
+  timeLeft=60;
+  gameOver=false;
+  eggCollected=false;
+  eggAnimFrame=0;
+  particles=[];
   updateHUD();
 }
 
-function spawnEnemy() {
-  const free = getFreePositions().filter(pos => 
-    !(Math.abs(pos.x - player.x) < tileSize && Math.abs(pos.y - player.y) < tileSize) &&
-    !(egg && Math.abs(pos.x - egg.x) < tileSize && Math.abs(pos.y - egg.y) < tileSize) &&
-    !enemies.some(e => Math.abs(pos.x - e.x) < tileSize && Math.abs(pos.y - e.y) < tileSize)
-  );
-  if(free.length === 0) return null;
-  const pos = free[Math.floor(Math.random()*free.length)];
-  let dx = (Math.random()*baseSpeed + 0.5) * (Math.random()<0.5?-1:1);
-  let dy = (Math.random()*baseSpeed + 0.5) * (Math.random()<0.5?-1:1);
-  const factor = baseSpeed / Math.sqrt(dx*dx + dy*dy);
-  dx *= factor;
-  dy *= factor;
-  return {x: pos.x, y: pos.y, dx, dy};
+function spawnEnemy(){
+  const free = getFreePositions().filter(pos=>!(Math.abs(pos.x-player.x)<tileSize && Math.abs(pos.y-player.y)<tileSize) &&
+                                               !(egg && Math.abs(pos.x-egg.x)<tileSize && Math.abs(pos.y-egg.y)<tileSize) &&
+                                               !enemies.some(e=>Math.abs(pos.x-e.x)<tileSize && Math.abs(pos.y-e.y)<tileSize));
+  if(free.length===0) return null;
+  const pos=free[Math.floor(Math.random()*free.length)];
+  let dx=(Math.random()*baseSpeed+0.5)*(Math.random()<0.5?-1:1);
+  let dy=(Math.random()*baseSpeed+0.5)*(Math.random()<0.5?-1:1);
+  const factor=baseSpeed/Math.sqrt(dx*dx+dy*dy);
+  dx*=factor; dy*=factor;
+
+  // Red particle burst for enemy spawn
+  createParticles(pos.x, pos.y, 'red');
+
+  return {x:pos.x, y:pos.y, dx, dy};
 }
 
-function spawnEgg() {
-  const free = getFreePositions().filter(pos => 
-    !(Math.abs(pos.x - player.x) < tileSize && Math.abs(pos.y - player.y) < tileSize) &&
-    !enemies.some(e => Math.abs(pos.x - e.x) < tileSize && Math.abs(pos.y - e.y) < tileSize)
-  );
-  egg = free[Math.floor(Math.random()*free.length)];
+function spawnEgg(){
+  const free=getFreePositions().filter(pos=>!(Math.abs(pos.x-player.x)<tileSize && Math.abs(pos.y-player.y)<tileSize) &&
+                                               !enemies.some(e=>Math.abs(pos.x-e.x)<tileSize && Math.abs(pos.y-e.y)<tileSize));
+  egg=free[Math.floor(Math.random()*free.length)];
+  eggCollected=false; eggAnimFrame=0;
 }
 
-// Eye helper
-function drawEyes(x, y, size, dx, dy) {
-  const eyeOffset = size/4;
-  const eyeSize = 5;
-  const angle = Math.atan2(dy, dx);
-  const eyeMove = eyeOffset/2;
-  const exOffset = Math.cos(angle) * eyeMove;
-  const eyOffset = Math.sin(angle) * eyeMove;
-
-  const leftEyeX = x + eyeOffset + exOffset;
-  const leftEyeY = y + eyeOffset + eyOffset;
-  const rightEyeX = x + size - eyeOffset - eyeSize + exOffset;
-  const rightEyeY = y + eyeOffset + eyOffset;
-
+function drawEyes(x,y,size,dx,dy){
+  const eyeOffset=size/4, eyeSize=5;
+  const angle=Math.atan2(dy,dx), eyeMove=eyeOffset/2;
+  const exOffset=Math.cos(angle)*eyeMove, eyOffset=Math.sin(angle)*eyeMove;
   ctx.fillStyle='white';
-  ctx.fillRect(leftEyeX, leftEyeY, eyeSize, eyeSize);
-  ctx.fillRect(rightEyeX, rightEyeY, eyeSize, eyeSize);
+  ctx.fillRect(x+eyeOffset+exOffset, y+eyeOffset+eyOffset, eyeSize, eyeSize);
+  ctx.fillRect(x+size-eyeOffset-eyeSize+exOffset, y+eyeOffset+eyOffset, eyeSize, eyeSize);
 }
 
-function drawMaze() {
+function drawMaze(){
   for(let row=0; row<rows; row++){
     for(let col=0; col<cols; col++){
       if(maze[row][col]===1){
@@ -210,144 +199,154 @@ function drawPlayer(){
 function drawEnemies(){
   enemies.forEach(e=>{
     ctx.fillStyle='red';
-    ctx.fillRect(e.x, e.y, enemySize, enemySize);
-    drawEyes(e.x, e.y, enemySize, e.dx, e.dy);
+    ctx.fillRect(e.x,e.y,enemySize,enemySize);
+    drawEyes(e.x,e.y,enemySize,e.dx,e.dy);
   });
 }
 
 function drawEgg(){
+  const scale=eggCollected?1+0.3*Math.sin(eggAnimFrame/5):1;
   ctx.fillStyle='gold';
   ctx.beginPath();
-  ctx.ellipse(egg.x+eggSize/2, egg.y+eggSize/2, eggSize/2, eggSize/2, 0,0,Math.PI*2);
+  ctx.ellipse(egg.x+eggSize/2, egg.y+eggSize/2, eggSize/2*scale, eggSize/2*scale, 0,0,Math.PI*2);
   ctx.fill();
 }
 
-function rectCollision(a,b,sizeA,sizeB){
-  return a.x < b.x + sizeB && a.x + sizeA > b.x &&
-         a.y < b.y + sizeB && a.y + sizeA > b.y;
+// Generic particle creation function with color
+function createParticles(x,y,color){
+  for(let i=0;i<12;i++){
+    particles.push({
+      x:x+(color==='gold'?eggSize/2:enemySize/2),
+      y:y+(color==='gold'?eggSize/2:enemySize/2),
+      dx:(Math.random()-0.5)*4,
+      dy:(Math.random()-0.5)*4,
+      life:30+Math.random()*20,
+      size:2+Math.random()*3,
+      color
+    });
+  }
 }
 
-function wallCollisionPhysics(obj, size){
+function drawParticles(){
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    let r,g,b;
+    if(p.color==='gold'){ r=255; g=215; b=0; }
+    else if(p.color==='red'){ r=255; g=0; b=0; }
+    else if(p.color==='green'){ r=0; g=255; b=0; }
+    ctx.fillStyle=`rgba(${r},${g},${b},${p.life/50})`;
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
+    ctx.fill();
+    p.x+=p.dx; p.y+=p.dy;
+    p.life--;
+    if(p.life<=0) particles.splice(i,1);
+  }
+}
+
+function rectCollision(a,b,sizeA,sizeB){
+  return a.x<b.x+sizeB && a.x+sizeA>b.x && a.y<b.y+sizeB && a.y+sizeA>b.y;
+}
+
+function wallCollisionPhysics(obj,size){
   for(let row=0; row<rows; row++){
     for(let col=0; col<cols; col++){
       if(maze[row][col]===1){
-        const wall = {x: col*tileSize, y: row*tileSize, size: tileSize};
-        if(obj.x < wall.x + wall.size &&
-           obj.x + size > wall.x &&
-           obj.y < wall.y + wall.size &&
-           obj.y + size > wall.y){
-          const prevX = obj.x - obj.dx;
-          const prevY = obj.y - obj.dy;
-          if(prevX + size <= wall.x || prevX >= wall.x + wall.size) obj.dx *= -1;
-          if(prevY + size <= wall.y || prevY >= wall.y + wall.size) obj.dy *= -1;
+        const wall={x:col*tileSize, y:row*tileSize, size:tileSize};
+        if(obj.x<wall.x+wall.size && obj.x+size>wall.x && obj.y<wall.y+wall.size && obj.y+size>wall.y){
+          const prevX=obj.x-obj.dx, prevY=obj.y-obj.dy;
+          if(prevX+size<=wall.x || prevX>=wall.x+wall.size) obj.dx*=-1;
+          if(prevY+size<=wall.y || prevY>=wall.y+wall.size) obj.dy*=-1;
         }
       }
     }
   }
-  obj.x += obj.dx;
-  obj.y += obj.dy;
+  obj.x+=obj.dx; obj.y+=obj.dy;
 }
 
-function updatePlayer(){ wallCollisionPhysics(player, playerSize); }
-function updateEnemies(){ enemies.forEach(e=>wallCollisionPhysics(e, enemySize)); }
+function updatePlayer(){ wallCollisionPhysics(player,playerSize); }
+function updateEnemies(){ enemies.forEach(e=>wallCollisionPhysics(e,enemySize)); }
 
 function checkCollisions(){
   enemies.forEach(enemy=>{
-    if(rectCollision(player, enemy, playerSize, enemySize)){
+    if(rectCollision(player,enemy,playerSize,enemySize)){
       lives--;
-      if(lives <=0){
+      if(lives<=0){
         gameOver=true;
-        if(score > highScore){
-          highScore = score;
-          alert(`New High Score! ${highScore}`);
-        } else {
-          alert(`Game Over! Final Score: ${score}`);
-        }
+        if(score>highScore) highScore=score;
+        alert(score>highScore?`New High Score! ${highScore}`:`Game Over! Final Score: ${score}`);
         initGame();
         startTimer();
       }
-      resetPlayer();
+      respawnPlayer();
     }
   });
-
-  if(rectCollision(player, egg, playerSize, eggSize)){
+  if(rectCollision(player,egg,playerSize,eggSize) && !eggCollected){
     score++;
-    enemies.push(spawnEnemy());
+    eggCollected=true;
+    createParticles(egg.x,egg.y, 'gold');
+    const newEnemy=spawnEnemy();
+    if(newEnemy) enemies.push(newEnemy);
     spawnEgg();
   }
-
-  updateHUD();
 }
 
-function resetPlayer(){
-  player.x = 1*tileSize+5;
-  player.y = 1*tileSize+5;
-  player.dx = baseSpeed;
-  player.dy = 0;
+function respawnPlayer(){
+  player.x=1*tileSize+5;
+  player.y=1*tileSize+5;
+  player.dx=baseSpeed;
+  player.dy=0;
+  createParticles(player.x, player.y, 'green');
 }
 
 function updateHUD(){
-  const livesStr = '❤️'.repeat(lives);
-  document.getElementById('hudInfo').textContent = `Score: ${score} | Lives: ${livesStr} | High Score: ${highScore}`;
-  document.getElementById('timerBar').style.width = (timeLeft/60*100) + '%';
+  const livesStr='❤️'.repeat(lives);
+  document.getElementById('hudInfo').textContent=`Score: ${score} | Lives Remaining: ${livesStr} | High Score: ${highScore}`;
+  document.getElementById('timerBar').style.width=(timeLeft/60*100)+'%';
 }
 
 function gameLoop(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  drawMaze();
-  drawEgg();
-  drawPlayer();
-  drawEnemies();
-  updatePlayer();
-  updateEnemies();
-  checkCollisions();
+  drawMaze(); drawEgg(); drawPlayer(); drawEnemies(); drawParticles();
+  updatePlayer(); updateEnemies(); checkCollisions();
+  if(eggCollected) eggAnimFrame++;
   if(!gameOver) requestAnimationFrame(gameLoop);
 }
 
 let timerInterval;
 function startTimer(){
   clearInterval(timerInterval);
-  timeLeft = 60;
+  timeLeft=60;
   timerInterval=setInterval(()=>{
     if(gameOver) return;
     timeLeft--;
     updateHUD();
     if(timeLeft<=0){
       gameOver=true;
-      if(score > highScore){
-        highScore = score;
-        alert(`New High Score! ${highScore}`);
-      } else {
-        alert(`Time's up! Final Score: ${score}`);
-      }
+      if(score>highScore) highScore=score;
+      alert(score>highScore?`New High Score! ${highScore}`:`Time's up! Final Score: ${score}`);
       initGame();
       startTimer();
     }
   },1000);
 }
 
-// Countdown overlay
 function startCountdown(callback){
-  const overlay = document.getElementById('countdownOverlay');
+  const overlay=document.getElementById('countdownOverlay');
   overlay.style.display='block';
-  let count = 3;
-  overlay.textContent = count;
-  const countdownInterval = setInterval(()=>{
+  let count=3;
+  overlay.textContent=count;
+  updateHUD();
+  const countdownInterval=setInterval(()=>{
     count--;
-    if(count > 0){
-      overlay.textContent = count;
-    } else if(count === 0){
-      overlay.textContent = 'GO!';
-    } else {
-      clearInterval(countdownInterval);
-      overlay.style.display='none';
-      callback();
-    }
-  }, 1000);
+    if(count>0) overlay.textContent=count;
+    else if(count===0) overlay.textContent='GO!';
+    else { clearInterval(countdownInterval); overlay.style.display='none'; callback();}
+  },1000);
 }
 
-document.addEventListener('keydown', e => { keys[e.key] = true; updatePlayerDirection(); });
-document.addEventListener('keyup', e => { keys[e.key] = false; updatePlayerDirection(); });
+document.addEventListener('keydown', e=>{ keys[e.key]=true; updatePlayerDirection(); });
+document.addEventListener('keyup', e=>{ keys[e.key]=false; updatePlayerDirection(); });
 
 function updatePlayerDirection(){
   let dx=0, dy=0;
@@ -364,17 +363,13 @@ document.getElementById('startBtn').addEventListener('click', ()=>{
   canvas.style.display='block';
   document.getElementById('hud').style.display='block';
   startCountdown(()=>{
-    initGame();
-    startTimer();
-    gameLoop();
+    initGame(); startTimer(); gameLoop();
   });
 });
 
 document.getElementById('restartBtn').addEventListener('click', ()=>{
   startCountdown(()=>{
-    initGame();
-    startTimer();
-    gameLoop();
+    initGame(); startTimer(); gameLoop();
   });
 });
 </script>
