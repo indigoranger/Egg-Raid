@@ -38,6 +38,35 @@
     font-size: 18px;
     cursor: pointer;
   }
+  .heart {
+    display: inline-block;
+    color: red;
+    font-size: 24px;
+    margin: 0 2px;
+  }
+  #timerBarContainer {
+    width: 300px;
+    height: 20px;
+    background: #555;
+    margin: 10px auto;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  #timerBar {
+    height: 100%;
+    background: gold;
+    width: 100%;
+    transition: width 0.2s linear;
+  }
+  #countdownOverlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 80px;
+    display: none;
+    color: yellow;
+  }
 </style>
 </head>
 <body>
@@ -49,9 +78,14 @@
 </div>
 
 <div id="hud">
-  <div id="score">Score: 0 | Lives: 3 | Time: 60 | High Score: 0</div>
+  <div id="hudInfo"></div>
+  <div id="timerBarContainer">
+    <div id="timerBar"></div>
+  </div>
   <button id="restartBtn">Restart</button>
 </div>
+
+<div id="countdownOverlay"></div>
 
 <canvas id="gameCanvas" width="600" height="400"></canvas>
 
@@ -223,8 +257,12 @@ function checkCollisions(){
       lives--;
       if(lives <=0){
         gameOver=true;
-        if(score > highScore) highScore = score;
-        alert(`Game Over! Final Score: ${score}`);
+        if(score > highScore){
+          highScore = score;
+          alert(`New High Score! ${highScore}`);
+        } else {
+          alert(`Game Over! Final Score: ${score}`);
+        }
         initGame();
         startTimer();
       }
@@ -249,7 +287,9 @@ function resetPlayer(){
 }
 
 function updateHUD(){
-  document.getElementById('score').textContent=`Score: ${score} | Lives: ${lives} | Time: ${timeLeft} | High Score: ${highScore}`;
+  const livesStr = '❤️'.repeat(lives);
+  document.getElementById('hudInfo').textContent = `Score: ${score} | Lives: ${livesStr} | High Score: ${highScore}`;
+  document.getElementById('timerBar').style.width = (timeLeft/60*100) + '%';
 }
 
 function gameLoop(){
@@ -274,12 +314,36 @@ function startTimer(){
     updateHUD();
     if(timeLeft<=0){
       gameOver=true;
-      if(score > highScore) highScore = score;
-      alert(`Time's up! Final Score: ${score}`);
+      if(score > highScore){
+        highScore = score;
+        alert(`New High Score! ${highScore}`);
+      } else {
+        alert(`Time's up! Final Score: ${score}`);
+      }
       initGame();
       startTimer();
     }
   },1000);
+}
+
+// Countdown overlay
+function startCountdown(callback){
+  const overlay = document.getElementById('countdownOverlay');
+  overlay.style.display='block';
+  let count = 3;
+  overlay.textContent = count;
+  const countdownInterval = setInterval(()=>{
+    count--;
+    if(count > 0){
+      overlay.textContent = count;
+    } else if(count === 0){
+      overlay.textContent = 'GO!';
+    } else {
+      clearInterval(countdownInterval);
+      overlay.style.display='none';
+      callback();
+    }
+  }, 1000);
 }
 
 document.addEventListener('keydown', e => { keys[e.key] = true; updatePlayerDirection(); });
@@ -299,15 +363,19 @@ document.getElementById('startBtn').addEventListener('click', ()=>{
   document.getElementById('startScreen').style.display='none';
   canvas.style.display='block';
   document.getElementById('hud').style.display='block';
-  initGame();
-  startTimer();
-  gameLoop();
+  startCountdown(()=>{
+    initGame();
+    startTimer();
+    gameLoop();
+  });
 });
 
 document.getElementById('restartBtn').addEventListener('click', ()=>{
-  initGame();
-  startTimer();
-  gameLoop();
+  startCountdown(()=>{
+    initGame();
+    startTimer();
+    gameLoop();
+  });
 });
 </script>
 </body>
